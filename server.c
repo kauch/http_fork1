@@ -105,10 +105,6 @@ int main(int argc , char *argv[])
 					strlen(sentMessage), sentMessage);
 			}
 
-
-			
-			
-
 			write(client_sock, headers , strlen(headers));
 			printf("[%d] Written %d bytes.\n", getpid(), read_size);
 			

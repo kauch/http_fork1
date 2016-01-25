@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <signal.h> 
+#include <sys/stat.h>
 
 #define MAX_CONNECTIONS 10
 int connections = 0;
@@ -11,6 +12,14 @@ int connections = 0;
 void signal_handler(int signal)
 {
 	connections--;
+	printf("Client finished, %d available\n", connections);
+}
+
+int is_regular_file(const char *path)
+{
+    struct stat path_stat;
+    stat(path, &path_stat);
+    return S_ISREG(path_stat.st_mode);
 }
 
 int main(int argc , char *argv[])
@@ -37,17 +46,14 @@ int main(int argc , char *argv[])
 	}
 
 	listen(socket_desc , 3);
-	
-	//Accept and incoming connection
-	printf("Waiting for incoming connections...\n");
 	c = sizeof(struct sockaddr_in);
 
 	int parentPid = getpid();
 	signal(SIGUSR2, signal_handler);
 	
-	//accept connection from an incoming client
 	while(1)
 	{
+		printf("Waiting for incoming connections...\n");
 		client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c);
 		printf("Connection %d accepted\n", connections);
 
@@ -60,26 +66,56 @@ int main(int argc , char *argv[])
 		connections++;
 		int pid = fork();
 
-		if (pid != 0)
-			continue;
-
-		char receivedMessage[10000];
+		if (pid == 0)
+		{
+			char receivedMessage[10000];
 		
-		read_size = recv(client_sock , receivedMessage , 2000 , 0);
-		printf("Received %d bytes\n", read_size);
+			read_size = recv(client_sock , receivedMessage , 2000 , 0);
+			printf("[%d] Received %d bytes\n", getpid(), read_size);
+			//printf("Headers: %s", receivedMessage);
 
-		char* sentMessage = "Hello!";
+			char* filename = strtok(receivedMessage, " ");
+			filename = strtok(NULL, " ");
+			printf("[%d] Filename: %s\n", getpid(), filename);
 
-		char headers[10000];
-		sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", 
-			strlen(sentMessage), sentMessage);
+			char sentMessage[10000];
+			char headers[10000];
+			if (strcmp(filename, "/") == 0)
+			{
+				strcpy(sentMessage, "Root directory.");
+				sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", 
+					strlen(sentMessage), sentMessage);
+			}
+			else if ( access( filename, F_OK ) != -1 && is_regular_file(filename))
+			{
+				FILE * f = fopen (filename, "r");
+				char buffer[1000];
+				while (fgets(buffer, sizeof(buffer), f))
+				{
+					strcat(sentMessage, buffer);
+				}
+				sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", 
+					strlen(sentMessage), sentMessage);
+			}
+			else
+			{
+				strcpy(sentMessage, "404 Not Found");
+				sprintf(sentMessage, "\"%s\" not found", filename);
+				sprintf(headers, "HTTP/1.1 404 Not found\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", 
+					strlen(sentMessage), sentMessage);
+			}
 
-		write(client_sock, headers , strlen(headers));
-		printf("Written %d bytes.\n", read_size);
-		
-		close(client_sock);
-		kill(parentPid, SIGUSR2);
-		return 0;
+
+			
+			
+
+			write(client_sock, headers , strlen(headers));
+			printf("[%d] Written %d bytes.\n", getpid(), read_size);
+			
+			close(client_sock);
+			kill(parentPid, SIGUSR2);
+			return 0;
+		}
 	}
 	
 	

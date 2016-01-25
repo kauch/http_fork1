@@ -3,9 +3,15 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <signal.h> 
 
 #define MAX_CONNECTIONS 10
 int connections = 0;
+
+void signal_handler(int signal)
+{
+	connections--;
+}
 
 int main(int argc , char *argv[])
 {
@@ -35,6 +41,9 @@ int main(int argc , char *argv[])
 	//Accept and incoming connection
 	printf("Waiting for incoming connections...\n");
 	c = sizeof(struct sockaddr_in);
+
+	int parentPid = getpid();
+	signal(SIGUSR2, signal_handler);
 	
 	//accept connection from an incoming client
 	while(1)
@@ -50,23 +59,27 @@ int main(int argc , char *argv[])
 
 		connections++;
 		int pid = fork();
+
+		if (pid != 0)
+			continue;
+
+		char receivedMessage[10000];
 		
+		read_size = recv(client_sock , receivedMessage , 2000 , 0);
+		printf("Received %d bytes\n", read_size);
+
+		char* sentMessage = "Hello!";
+
+		char headers[10000];
+		sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", 
+			strlen(sentMessage), sentMessage);
+
+		write(client_sock, headers , strlen(headers));
+		printf("Written %d bytes.\n", read_size);
 		
-		//Receive a message from client
-		while( (read_size = recv(client_sock , client_message , 2000 , 0)) > 0 )
-		{
-			printf("Read: %s\n, length: %d\n", client_message, read_size);
-			//Send the message back to client
-			write(client_sock , client_message , strlen(client_message));
-		}
-		
-		if(read_size == 0)
-		{
-			printf("Client disconnected\n");
-			fflush(stdout);
-		}
-		else if(read_size == -1)
-			printf("recv failed\n");
+		close(client_sock);
+		kill(parentPid, SIGUSR2);
+		return 0;
 	}
 	
 	

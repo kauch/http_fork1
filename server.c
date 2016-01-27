@@ -61,6 +61,7 @@ int main(int argc , char *argv[])
 		{
 			printf("Too many connections already, passing\n");
 			close(client_sock);
+			continue;
 		}
 
 		connections++;
@@ -70,7 +71,7 @@ int main(int argc , char *argv[])
 		{
 			char receivedMessage[10000];
 		
-			read_size = recv(client_sock , receivedMessage , 2000 , 0);
+			read_size = recv(client_sock , receivedMessage , 10000 , 0);
 			printf("[%d] Received %d bytes\n", getpid(), read_size);
 			//printf("Headers: %s", receivedMessage);
 
@@ -86,7 +87,7 @@ int main(int argc , char *argv[])
 				sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", 
 					strlen(sentMessage), sentMessage);
 			}
-			else if ( access( filename, F_OK ) != -1 && is_regular_file(filename))
+			else if (access( filename, F_OK ) != -1 && is_regular_file(filename))
 			{
 				FILE * f = fopen (filename, "r");
 				char buffer[1000];
@@ -99,7 +100,6 @@ int main(int argc , char *argv[])
 			}
 			else
 			{
-				strcpy(sentMessage, "404 Not Found");
 				sprintf(sentMessage, "\"%s\" not found", filename);
 				sprintf(headers, "HTTP/1.1 404 Not found\r\nContent-Length: %d\r\nContent-Type: text/plain\r\n\r\n%s", 
 					strlen(sentMessage), sentMessage);
